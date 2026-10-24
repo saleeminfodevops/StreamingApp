@@ -6,7 +6,7 @@ metadata:
     {{- include "streamingapp.labels" . | nindent 4 }}
 
 data:
-  AWS_REGION: "us-east-1"
+  AWS_REGION: "ap-south-1"
 
   AUTH_SERVICE_URL: "http://auth:3001"
   STREAMING_SERVICE_URL: "http://streaming:3002"
