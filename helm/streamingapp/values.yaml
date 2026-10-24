@@ -1,161 +1,60 @@
-image:
-  tag: "1287d09"
+namespace: streamingapp
 
 services:
-  - name: admin-service
-    imagename: streamingapp-admin-saleem
-    replicaCount: 1
-    port: 3003
-    targetPort: 3003
-    path: /api/admin
-    servicetype: ClusterIP
-    env:
-      - name: PORT
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: ADMIN_SERVICE_PORT
-      - name: MONGO_URI
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: MONGO_URI
-      - name: JWT_SECRET
-        valueFrom:
-          secretKeyRef:
-            name: secrets
-            key: JWT_SECRET
-      - name: CLIENT_URL
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: CLIENT_URL
-      - name: AWS_SECRET_KEY_ID
-        valueFrom:
-          secretKeyRef:
-            name: secrets
-            key: AWS_SECRET_KEY_ID
-      - name: AWS_SECRET_ACCESS_KEY
-        valueFrom:
-          secretKeyRef:
-            name: secrets
-            key: AWS_SECRET_ACCESS_KEY
-      - name: AWS_REGION
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: AWS_REGION
-      - name: AWS_S3_BUCKET
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: AWS_S3_BUCKET
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "300m"
-      memory: "256Mi"
-  
-  - name: chat-service
-    imagename: streamingapp-chat-saleem
-    replicaCount: 1
-    port: 3004
-    targetPort: 3004
-    path: /api/chat
-    servicetype: ClusterIP
-    env:
-      - name: PORT
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: CHAT_SERVICE_PORT
-      - name: MONGO_URI
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: MONGO_URI
-      - name: JWT_SECRET
-        valueFrom:
-          secretKeyRef:
-            name: secrets
-            key: JWT_SECRET
-      - name: CLIENT_URL
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: CLIENT_URL
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "300m"
-      memory: "256Mi"
-  
-  - name: streaming-service
-    imagename: streamingapp-streaming-saleem
-    replicaCount: 1
+
+  auth:
+    name: auth
+    image: 700800569732.dkr.ecr.us-east-1.amazonaws.com/streaming-auth
+    tag: "1.0.0"
+    replicas: 2
+    port: 3001
+
+  streaming:
+    name: streaming
+    image: 700800569732.dkr.ecr.us-east-1.amazonaws.com/streaming-stream
+    tag: "1.0.0"
+    replicas: 2
     port: 3002
-    targetPort: 3002
-    path: /api/streaming
-    servicetype: ClusterIP
-    env:
-      - name: PORT
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: STREAMING_SERVICE_PORT
-      - name: MONGO_URI
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: MONGO_URI
-      - name: JWT_SECRET
-        valueFrom:
-          secretKeyRef:
-            name: secrets
-            key: JWT_SECRET
-      - name: CLIENT_URL
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: CLIENT_URL
-      - name: AWS_SECRET_KEY_ID
-        valueFrom:
-          secretKeyRef:
-            name: secrets
-            key: AWS_SECRET_KEY_ID
-      - name: AWS_SECRET_ACCESS_KEY
-        valueFrom:
-          secretKeyRef:
-            name: secrets
-            key: AWS_SECRET_ACCESS_KEY
-      - name: AWS_REGION
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: AWS_REGION
-      - name: AWS_S3_BUCKET
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: AWS_S3_BUCKET
-      - name: AWS_CDN_URL
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: AWS_CDN_URL
-      - name: STREAMING_PUBLIC_URL
-        valueFrom:
-          configMapKeyRef:
-            name: configmap
-            key: STREAMING_PUBLIC_URL     
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "300m"
-      memory: "256Mi"
-  
-  
-  
+
+  admin:
+    name: admin
+    image: 700800569732.dkr.ecr.us-east-1.amazonaws.com/streaming-admin
+    tag: "1.0.0"
+    replicas: 2
+    port: 3003
+
+  chat:
+    name: chat
+    image: 700800569732.dkr.ecr.us-east-1.amazonaws.com/streaming-chat
+    tag: "1.0.0"
+    replicas: 2
+    port: 3004
+
+  frontend:
+    name: frontend
+    image: 700800569732.dkr.ecr.us-east-1.amazonaws.com/streaming-frontend
+    tag: "1.0.0"
+    replicas: 2
+    port: 80
+
+mongo:
+  name: mongo
+  image: mongo:7
+  port: 27017
+  storageSize: 5Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: streamingapp.local
+
+secret:
+  existingSecret: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
