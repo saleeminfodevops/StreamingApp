@@ -2,227 +2,205 @@ pipeline {
     agent any
 
     environment {
-        AWS_ACCOUNT_ID      = "135808938060"
-        AWS_REGION          = "ap-south-1"
-        IMAGE_TAG           = "v${BUILD_NUMBER}"
-        ECR_BASE            = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        ECR_BACKEND         = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/dev-streaming-app-backend"
-        ECR_FRONTEND        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/dev-streaming-app-frontend"
-        AWS_CREDS_ID        = 'aws-credentials'
-        COMPOSE_PROJECT     = 'streamingapp'
+        AWS_REGION = 'ap-south-1'
+        AWS_ACCOUNT_ID = '135808938060'
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+        AUTH_IMAGE = "${ECR_REGISTRY}/streaming-auth"
+        STREAM_IMAGE = "${ECR_REGISTRY}/streaming-stream"
+        ADMIN_IMAGE = "${ECR_REGISTRY}/streaming-admin"
+        CHAT_IMAGE = "${ECR_REGISTRY}/streaming-chat"
+        FRONTEND_IMAGE = "${ECR_REGISTRY}/streaming-frontend"
+
+        IMAGE_TAG = '1.0.0'
     }
 
     stages {
 
-        stage('Install Prerequisites') {
+        stage('Checkout') {
             steps {
-                sh '''
-                    if command -v aws > /dev/null 2>&1; then
-                        echo "aws-cli already installed: $(aws --version)"
-                    else
-                        echo "Installing aws-cli and dependencies..."
-                        if command -v apk > /dev/null 2>&1; then
-                            apk add --no-cache aws-cli git curl
-                        elif command -v apt-get > /dev/null 2>&1; then
-                            apt-get update -y && apt-get install -y awscli git curl
-                        elif command -v yum > /dev/null 2>&1; then
-                            yum install -y awscli git curl
-                        else
-                            echo "ERROR: No supported package manager found"
-                            exit 1
-                        fi
-                    fi
-                    echo "--- Tool versions ---"
-                    aws --version
-                    git --version
-                    docker --version
-                '''
+                echo 'Checking out StreamingApp source code...'
+                checkout scm
             }
         }
 
-        stage('Verify AWS Access and Login to ECR') {
+        stage('AWS Identity') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: "${AWS_CREDS_ID}",
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                     credentialsId: 'aws-ecr-credentials-saleem']
+                ]) {
                     sh '''
-                        echo "Verifying AWS credentials..."
+                        echo "Checking AWS identity..."
                         aws sts get-caller-identity
-
-                        echo "Listing ECR repositories..."
-                        aws ecr describe-repositories --region $AWS_REGION || true
-
-                        echo "Logging in to ECR..."
-                        aws ecr get-login-password --region $AWS_REGION \
-                            | docker login --username AWS --password-stdin $ECR_BASE
-
-                        echo "ECR login successful."
                     '''
                 }
             }
         }
 
-        stage('Build All Services') {
+        stage('Login to ECR') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: "${AWS_CREDS_ID}",
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    script {
-                        // Build only the services that have a Dockerfile (skip mongo)
-                        sh """
-                            echo "Building application services (mongo is a pulled image, not built)..."
-                            docker compose -p ${COMPOSE_PROJECT} -f docker-compose.yml build \
-                                auth streaming admin chat frontend
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                     credentialsId: 'aws-ecr-credentials-saleem']
+                ]) {
+                    sh '''
+                        echo "Logging in to Amazon ECR..."
 
-                            echo "--- Images produced ---"
-                            docker images | grep ${COMPOSE_PROJECT} || true
-                        """
-
-                        // -----------------------------------------------------------------
-                        // Tag backend services:
-                        //   streamingapp-auth  =>  .../dev-streaming-app-backend:auth-v29
-                        //   streamingapp-streaming  =>  .../dev-streaming-app-backend:streaming-v29
-                        //   etc.
-                        // Tag frontend service:
-                        //   streamingapp-frontend  =>  .../dev-streaming-app-frontend:frontend-v29
-                        // -----------------------------------------------------------------
-                        def backendServices = ['auth', 'streaming', 'admin', 'chat']
-
-                        for (String svc : backendServices) {
-                            sh """
-                                if docker image inspect ${COMPOSE_PROJECT}-${svc} > /dev/null 2>&1; then
-                                    LOCAL_IMAGE="${COMPOSE_PROJECT}-${svc}"
-                                elif docker image inspect ${COMPOSE_PROJECT}_${svc} > /dev/null 2>&1; then
-                                    LOCAL_IMAGE="${COMPOSE_PROJECT}_${svc}"
-                                else
-                                    echo "ERROR: Could not find local image for service '${svc}'"
-                                    docker images
-                                    exit 1
-                                fi
-                                echo "Tagging \$LOCAL_IMAGE -> ${ECR_BACKEND}:${svc}-${IMAGE_TAG}"
-                                docker tag \$LOCAL_IMAGE ${ECR_BACKEND}:${svc}-${IMAGE_TAG}
-                            """
-                        }
-
-                        // Tag frontend
-                        sh """
-                            if docker image inspect ${COMPOSE_PROJECT}-frontend > /dev/null 2>&1; then
-                                LOCAL_IMAGE="${COMPOSE_PROJECT}-frontend"
-                            elif docker image inspect ${COMPOSE_PROJECT}_frontend > /dev/null 2>&1; then
-                                LOCAL_IMAGE="${COMPOSE_PROJECT}_frontend"
-                            else
-                                echo "ERROR: Could not find local image for service 'frontend'"
-                                docker images
-                                exit 1
-                            fi
-                            echo "Tagging \$LOCAL_IMAGE -> ${ECR_FRONTEND}:frontend-${IMAGE_TAG}"
-                            docker tag \$LOCAL_IMAGE ${ECR_FRONTEND}:frontend-${IMAGE_TAG}
-                        """
-
-                        echo "All services tagged successfully."
-                    }
+                        aws ecr get-login-password \
+                          --region ${AWS_REGION} | \
+                        docker login \
+                          --username AWS \
+                          --password-stdin ${ECR_REGISTRY}
+                    '''
                 }
             }
         }
 
-        stage('Push All Services to ECR') {
+stage('Build Docker Images') {
+    steps {
+        sh '''
+            set -e
+
+            echo "=========================================="
+            echo "Building Auth Service..."
+            echo "=========================================="
+
+            docker build \
+              -t ${AUTH_IMAGE}:${IMAGE_TAG} \
+              -f backend/authService/Dockerfile \
+              backend/authService
+
+
+            echo "=========================================="
+            echo "Building Streaming Service..."
+            echo "=========================================="
+
+            docker build \
+              -t ${STREAM_IMAGE}:${IMAGE_TAG} \
+              -f backend/streamingService/Dockerfile \
+              backend
+
+
+            echo "=========================================="
+            echo "Building Admin Service..."
+            echo "=========================================="
+
+            docker build \
+              -t ${ADMIN_IMAGE}:${IMAGE_TAG} \
+              -f backend/adminService/Dockerfile \
+              backend
+
+
+            echo "=========================================="
+            echo "Building Chat Service..."
+            echo "=========================================="
+
+            docker build \
+              -t ${CHAT_IMAGE}:${IMAGE_TAG} \
+              -f backend/chatService/Dockerfile \
+              backend
+
+
+            echo "=========================================="
+            echo "Building Frontend..."
+            echo "=========================================="
+
+            docker build \
+              -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+              -f frontend/Dockerfile \
+              frontend
+
+
+            echo "=========================================="
+            echo "All Docker images built successfully!"
+            echo "=========================================="
+
+            docker images | grep streaming-
+        '''
+    }
+}
+
+        stage('Push Images to ECR') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: "${AWS_CREDS_ID}",
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    script {
-                        sh """
-                            echo "Re-authenticating to ECR..."
-                            aws ecr get-login-password --region ${AWS_REGION} \
-                                | docker login --username AWS --password-stdin ${ECR_BASE}
-                        """
+                sh '''
+                    echo "Pushing Auth Service..."
+                    docker push ${AUTH_IMAGE}:${IMAGE_TAG}
 
-                        // Push backend services to dev-streaming-app-backend repo
-                        def backendServices = ['auth', 'streaming', 'admin', 'chat']
-                        for (String svc : backendServices) {
-                            sh """
-                                echo "Pushing ${ECR_BACKEND}:${svc}-${IMAGE_TAG} ..."
-                                docker push ${ECR_BACKEND}:${svc}-${IMAGE_TAG}
-                                echo "Successfully pushed backend service: ${svc}"
-                            """
-                        }
+                    echo "Pushing Streaming Service..."
+                    docker push ${STREAM_IMAGE}:${IMAGE_TAG}
 
-                        // Push frontend to dev-streaming-app-frontend repo
-                        sh """
-                            echo "Pushing ${ECR_FRONTEND}:frontend-${IMAGE_TAG} ..."
-                            docker push ${ECR_FRONTEND}:frontend-${IMAGE_TAG}
-                            echo "Successfully pushed frontend"
-                        """
-                    }
+                    echo "Pushing Admin Service..."
+                    docker push ${ADMIN_IMAGE}:${IMAGE_TAG}
+
+                    echo "Pushing Chat Service..."
+                    docker push ${CHAT_IMAGE}:${IMAGE_TAG}
+
+                    echo "Pushing Frontend..."
+                    docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+
+                    echo "All images pushed successfully."
+                '''
+            }
+        }
+
+        stage('Verify ECR Images') {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                     credentialsId: 'aws-ecr-credentials-saleem']
+                ]) {
+                    sh '''
+                        echo "Verifying images in ECR..."
+
+                        aws ecr describe-images \
+                          --repository-name streaming-auth \
+                          --region ${AWS_REGION} \
+                          --query 'imageDetails[*].imageTags' \
+                          --output table
+
+                        aws ecr describe-images \
+                          --repository-name streaming-stream \
+                          --region ${AWS_REGION} \
+                          --query 'imageDetails[*].imageTags' \
+                          --output table
+
+                        aws ecr describe-images \
+                          --repository-name streaming-admin \
+                          --region ${AWS_REGION} \
+                          --query 'imageDetails[*].imageTags' \
+                          --output table
+
+                        aws ecr describe-images \
+                          --repository-name streaming-chat \
+                          --region ${AWS_REGION} \
+                          --query 'imageDetails[*].imageTags' \
+                          --output table
+
+                        aws ecr describe-images \
+                          --repository-name streaming-frontend \
+                          --region ${AWS_REGION} \
+                          --query 'imageDetails[*].imageTags' \
+                          --output table
+                    '''
                 }
             }
         }
     }
 
     post {
-        always {
-            echo "Cleaning up local Docker images..."
-            sh '''
-                # Remove compose-built images (both v1/v2 naming)
-                for SVC in auth streaming admin chat frontend; do
-                    docker rmi ${COMPOSE_PROJECT}-${SVC} || true
-                    docker rmi ${COMPOSE_PROJECT}_${SVC} || true
-                done
-
-                # Remove ECR-tagged backend images
-                for SVC in auth streaming admin chat; do
-                    docker rmi ${ECR_BACKEND}:${SVC}-${IMAGE_TAG} || true
-                done
-
-                # Remove ECR-tagged frontend image
-                docker rmi ${ECR_FRONTEND}:frontend-${IMAGE_TAG} || true
-
-                docker system prune -f
-            '''
-        }
-
         success {
-            echo "All microservices built and pushed to ECR successfully!"
-            emailext(
-                to: 'devendra8182@gmail.com',
-                subject: "SUCCESS: Streaming CI/CD Pipeline - Build #${env.BUILD_NUMBER}",
-                body: """
-                    Build #${env.BUILD_NUMBER} completed successfully.
-
-                    Image Tag : ${env.IMAGE_TAG}
-
-                    Backend ECR  : ${env.ECR_BACKEND}
-                    Tags pushed  : auth-${env.IMAGE_TAG}, streaming-${env.IMAGE_TAG}, admin-${env.IMAGE_TAG}, chat-${env.IMAGE_TAG}
-
-                    Frontend ECR : ${env.ECR_FRONTEND}
-                    Tag pushed   : frontend-${env.IMAGE_TAG}
-
-                    View build: ${env.BUILD_URL}
-                """
-            )
+            echo '=============================================='
+            echo 'StreamingApp CI Pipeline completed SUCCESSFULLY'
+            echo 'All 5 Docker images pushed to ECR.'
+            echo '=============================================='
         }
 
         failure {
-            echo "Pipeline failed. Images were NOT pushed to ECR."
-            emailext(
-                to: 'devendra8182@gmail.com',
-                subject: "FAILURE: Streaming CI/CD Pipeline - Build #${env.BUILD_NUMBER}",
-                body: """
-                    Build #${env.BUILD_NUMBER} FAILED.
-
-                    Please check the Jenkins console output for details:
-                    ${env.BUILD_URL}console
-                """
-            )
+            echo '=============================================='
+            echo 'StreamingApp CI Pipeline FAILED'
+            echo 'Please check the Jenkins console output.'
+            echo '=============================================='
         }
     }
 }
