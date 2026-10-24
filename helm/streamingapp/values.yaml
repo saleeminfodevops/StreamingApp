@@ -11,7 +11,7 @@ services:
 
   streaming:
     name: streaming
-    image: 135808938060.dkr.ecr.ap-south-1.amazonaws.com/streaming-stream
+    image: 135808938060.dkr.ecr.ap-south-1.amazonaws.com/streaming-streaming
     tag: "1.0.0"
     replicas: 2
     port: 3002
