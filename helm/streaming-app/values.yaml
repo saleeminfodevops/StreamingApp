@@ -1,61 +1,161 @@
-backendrepositoryName: "975050024946.dkr.ecr.us-east-1.amazonaws.com/dev-streaming-app-backend"
-frontendrepositoryName: "975050024946.dkr.ecr.us-east-1.amazonaws.com/dev-streaming-app-frontend"
+image:
+  tag: "1287d09"
 
-namespace:
-  name: streaming-app
-
-frontend:
-  replicaCount: 2
-  image:
-    tag: frontend-v31
-
-backend:
-  admin:
-    name: admin
-    tag: admin-v31
+services:
+  - name: admin-service
+    imagename: streamingapp-admin-saleem
+    replicaCount: 1
     port: 3003
-    replicaCount: 2
-
-  auth:
-    name: auth
-    tag: auth-v31
-    port: 3001
-    replicaCount: 2
-
-  chat:
-    name: chat
-    tag: chat-v31
+    targetPort: 3003
+    path: /api/admin
+    servicetype: ClusterIP
+    env:
+      - name: PORT
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: ADMIN_SERVICE_PORT
+      - name: MONGO_URI
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: MONGO_URI
+      - name: JWT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: secrets
+            key: JWT_SECRET
+      - name: CLIENT_URL
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: CLIENT_URL
+      - name: AWS_SECRET_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: secrets
+            key: AWS_SECRET_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: secrets
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_REGION
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: AWS_REGION
+      - name: AWS_S3_BUCKET
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: AWS_S3_BUCKET
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  
+  - name: chat-service
+    imagename: streamingapp-chat-saleem
+    replicaCount: 1
     port: 3004
-    replicaCount: 2
-
-  streaming:
-    name: streaming
-    tag: streaming-v31
+    targetPort: 3004
+    path: /api/chat
+    servicetype: ClusterIP
+    env:
+      - name: PORT
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: CHAT_SERVICE_PORT
+      - name: MONGO_URI
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: MONGO_URI
+      - name: JWT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: secrets
+            key: JWT_SECRET
+      - name: CLIENT_URL
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: CLIENT_URL
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  
+  - name: streaming-service
+    imagename: streamingapp-streaming-saleem
+    replicaCount: 1
     port: 3002
-    replicaCount: 2
-
-configMap:
-  AUTH_PORT: "3001"
-  STREAMING_PORT: "3002"
-  ADMIN_PORT: "3003"
-  CHAT_PORT: "3004"
-  MONGO_URI: "mongodb+srv://devendra8182_db_user:h7bjVagR8ru8DFdo@devendra.io1nvag.mongodb.net/streamingapp"
-  CLIENT_URLS: "http://abb778b4f1b074e96b0e11d90161e712-973608811.us-east-2.elb.amazonaws.com,http://localhost:3000"
-  AWS_REGION: "us-east-2"
-  AWS_S3_BUCKET: "devendra-streamingapp"
-  AWS_CDN_URL: "d30iatvbnvx8m.cloudfront.net"
-
-ingress:
-  className: "nginx"
-  host: "abb778b4f1b074e96b0e11d90161e712-973608811.us-east-2.elb.amazonaws.com"
-
-replicaCount: 2
-databaseReplicaCount: 1
-
-resources:
-  requests:
-    cpu: "100m"
-    memory: "128Mi"
-  limits:
-    cpu: "250m"
-    memory: "256Mi"
+    targetPort: 3002
+    path: /api/streaming
+    servicetype: ClusterIP
+    env:
+      - name: PORT
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: STREAMING_SERVICE_PORT
+      - name: MONGO_URI
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: MONGO_URI
+      - name: JWT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: secrets
+            key: JWT_SECRET
+      - name: CLIENT_URL
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: CLIENT_URL
+      - name: AWS_SECRET_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: secrets
+            key: AWS_SECRET_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: secrets
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_REGION
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: AWS_REGION
+      - name: AWS_S3_BUCKET
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: AWS_S3_BUCKET
+      - name: AWS_CDN_URL
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: AWS_CDN_URL
+      - name: STREAMING_PUBLIC_URL
+        valueFrom:
+          configMapKeyRef:
+            name: configmap
+            key: STREAMING_PUBLIC_URL     
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  
+  
+  
